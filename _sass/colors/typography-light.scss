@@ -1,10 +1,11 @@
 /*
  * The syntax light mode typography colors
  */
+$bg_color: rgb(245, 242, 240);
 
 @mixin light-scheme {
   /* Framework color */
-  --main-bg: white;
+  --main-bg: rgb(245, 242, 240);
   --mask-bg: #c1c3c5;
   --main-border-color: #f3f3f3;
 
@@ -16,7 +17,7 @@
   --label-color: #585858;
   --blockquote-border-color: #eeeeee;
   --blockquote-text-color: #757575;
-  --link-color: #0056b2;
+  --link-color: rgb(160, 9, 9);
   --link-underline-color: #dee2e6;
   --button-bg: #ffffff;
   --btn-border-color: #e9ecef;
@@ -50,7 +51,7 @@
   --avatar-border-color: white;
 
   /* Topbar */
-  --topbar-bg: rgb(255, 255, 255, 0.7);
+  --topbar-bg: $bg_color;
   --topbar-text-color: rgb(78, 78, 78);
   --search-border-color: rgb(240, 240, 240);
   --search-icon-color: #c2c6cc;
