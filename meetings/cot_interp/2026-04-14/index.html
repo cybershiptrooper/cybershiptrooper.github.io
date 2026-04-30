@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Long chains break batch-reweighted metrics — 14 April 2026</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=Source+Serif+4:opsz,wght@8..60,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="../assets/theme.css">
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      processEscapes: true
+    },
+    chtml: { scale: 1.02 },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+
+<body data-slug="2026-04-14">
+
+<button class="nav-toggle" type="button" aria-label="Open meetings menu">≡</button>
+<div class="nav-scrim" aria-hidden="true"></div>
+
+<div class="app">
+
+  <aside class="sidebar" aria-label="Meeting navigation"></aside>
+
+  <main class="content">
+    <div class="shell narrow">
+
+      <header class="masthead">
+        <div class="kicker">Research log · RL interpretability</div>
+        <h1>Long chains break <em>batch-reweighted</em> metrics.</h1>
+        <p class="deck">
+          Sum $T$ per-token terms per chain, normalise across the batch: once
+          $T$ is large, the result is numerically one-hot on a single chain.
+        </p>
+        <div class="byline">
+          <span>14 April 2026</span>
+          <span class="dot"></span>
+          <span>Meeting notes</span>
+          <span class="dot"></span>
+          <span>Reading time ~ 8 min</span>
+        </div>
+      </header>
+
+      <div class="tabs-wrap">
+        <div class="tabs" role="tablist">
+          <button class="tab-btn" role="tab" id="tab1-btn" aria-controls="tab1" aria-selected="true"
+                  data-target="tab1"><span class="num">01</span>Setup &amp; metrics</button>
+          <button class="tab-btn" role="tab" id="tab2-btn" aria-controls="tab2" aria-selected="false"
+                  data-target="tab2"><span class="num">02</span>Forking paths</button>
+          <button class="tab-btn" role="tab" id="tab3-btn" aria-controls="tab3" aria-selected="false"
+                  data-target="tab3"><span class="num">03</span>Reward gap</button>
+        </div>
+      </div>
+
+      <!-- ============================ TAB 1 =========================== -->
+      <section class="panel" id="tab1" role="tabpanel" aria-labelledby="tab1-btn" data-active="true">
+
+        <h2>A common setup, and four ways to compare the masked model to the clean one.</h2>
+
+        <h3>Common setup</h3>
+        <ul>
+          <li>A <strong>clean</strong> language model $p$ and a <strong>masked</strong> language model $q$.
+            $q$ is obtained from $p$ by ablating some attention edges (the
+            "circuit" we're trying to discover). We want to know whether $q$ still
+            behaves like $p$ on a given reasoning problem.</li>
+          <li>A fixed <strong>prefix</strong>: a question plus a partial chain of thought.</li>
+          <li>$N$ chains $s_1,\ldots,s_N$ drawn once from $p$ conditioned on the
+            prefix. Each chain is a full continuation; we extract a final answer
+            $a_i \in \{1,\ldots,K\}$ from it (parsing the <code>\boxed{...}</code>), and
+            one answer $A$ is marked "correct".</li>
+          <li>For each chain we can evaluate its total log-likelihood under either
+            model, as a sum of $T$ per-token log-probs after the prefix:</li>
+        </ul>
+
+        $$
+        \log p(s_i) = \sum_{t=1}^{T} \log p(x_t^{(i)} \mid x_{\lt t}^{(i)}),
+        \qquad
+        \log q(s_i) = \sum_{t=1}^{T} \log q(x_t^{(i)} \mid x_{\lt t}^{(i)}).
+        $$
+
+        <p>The goal is to compare $p$ and $q$ at the level of their <strong>answer
+        distributions</strong></p>
+
+        $$
+        P^{\star}_c(a) = \sum_s p(s)\,\mathbb{1}[a(s)=a],
+        \qquad
+        P^{\star}_m(a) = \sum_s q(s)\,\mathbb{1}[a(s)=a].
+        $$
+
+        <p>We can estimate $P^{\star}_c$ directly from the $N$ chains (they were
+        drawn from $p$). We cannot directly sample from $q$ inside the training
+        loop — it would require regenerating chains after every mask update and
+        would make gradients through the mask intractable — so every metric
+        below estimates $P_m$ by <strong>reweighting the chains we already have</strong>.</p>
+
+        <h3>Metric 1 — frequency &amp; importance-sampled answer KL</h3>
+
+        <p><strong>Clean side.</strong> Since chains are drawn from $p$, a plain frequency
+        count is unbiased for $P^{\star}_c$:</p>
+
+        $$
+        \widehat P_c(a) = \frac{1}{N}\sum_i \mathbb{1}[a_i = a].
+        $$
+
+        <p><strong>Masked side.</strong> We want an expectation under $q$ but only have
+        samples from $p$. Standard fix: multiply each sample by the likelihood
+        ratio $q(s_i)/p(s_i)$, which reweights the $p$-samples into $q$-samples
+        in expectation. This is <strong>importance sampling</strong>. Two practical
+        problems:</p>
+        <ol>
+          <li>We only know $q$ up to the same normalisation as $p$ (both are
+            autoregressive over the same vocabulary), so the absolute scale of
+            $q(s_i)/p(s_i)$ is not trustworthy.</li>
+          <li>Raw importance sampling has very high variance when a few weights
+            are much larger than the rest.</li>
+        </ol>
+
+        <p>Both are handled by <strong>normalising the weights over the batch</strong>
+        (dividing by $\sum_j q(s_j)/p(s_j)$ instead of by $N$). This is
+        "self-normalised" importance sampling:</p>
+
+        $$
+        \widehat P_m(a)
+        = \frac{\sum_{i:\,a_i = a}\, q(s_i)/p(s_i)}{\sum_{j}\, q(s_j)/p(s_j)}.
+        $$
+
+        <p>As $N \to \infty$, $\widehat P_m \to P^{\star}_m$, and so the KL</p>
+
+        $$
+        \mathrm{KL}\!\left(\widehat P_c \,\big\|\, \widehat P_m\right)
+        \;\longrightarrow\;
+        \mathrm{KL}\!\left(P^{\star}_c \,\big\|\, P^{\star}_m\right)
+        $$
+
+        <p>asks the natural question: <em>do the two models produce the same answer
+        distribution on fresh draws?</em></p>
+
+        <h3>Metric 2 — forking-paths outcome distribution (Bigelow et al.)</h3>
+
+        <p>Same building blocks, but instead of reweighting each chain by the
+        importance ratio, weight each chain by its <strong>likelihood under the model
+        being summarised</strong>:</p>
+
+        $$
+        \widehat P^{\,w}_c(a) = \frac{\sum_{i:\,a_i=a} p(s_i)}{\sum_j p(s_j)},
+        \qquad
+        \widehat P^{\,w}_m(a) = \frac{\sum_{i:\,a_i=a} q(s_i)}{\sum_j q(s_j)}.
+        $$
+
+        <p>The objective is $\mathrm{KL}(\widehat P^{\,w}_c \,\|\, \widehat P^{\,w}_m)$.
+        This construction is the same as Metric 1 in that both are convex
+        combinations of $\{\mathbb{1}[a_i=a]\}$ over the $N$ chains; the
+        difference is which weights are used — importance ratios in Metric 1,
+        raw model likelihoods in Metric 2.</p>
+
+        <h3>Metric 3 — reward gap</h3>
+
+        <p>Reuses Metric 1's $\widehat P_m$, but collapses every non-target answer
+        into a single bucket and takes the gap:</p>
+
+        $$
+        \mathrm{reward\_gap}(M)
+        = \widehat P_m(A) - \max_{a \ne A} \widehat P_m(a)
+        \;\in\; [-1, +1].
+        $$
+
+        <p>The learner minimises $-\mathrm{reward\_gap}(M)$.</p>
+
+        <h3>Metric 4 — local per-token KL</h3>
+
+        <p>No chain-level weighting at all. Walk along one fixed continuation and
+        average the next-token KL between $p$ and $q$ token by token:</p>
+
+        $$
+        \mathrm{KL}_{\text{local}}
+        = \frac{1}{T}\sum_{t=1}^{T}
+           \mathrm{KL}\!\left(p(\cdot\mid x_{\lt t}) \,\big\|\, q(\cdot\mid x_{\lt t})\right).
+        $$
+
+        <p>This is a purely local distributional match on one trajectory, with no
+        notion of answer buckets.</p>
+
+      </section>
+
+      <!-- ============================ TAB 2 =========================== -->
+      <section class="panel" id="tab2" role="tabpanel" aria-labelledby="tab2-btn">
+
+        <h2>Forking paths is biased in the limit, and collapses to a delta on long chains.</h2>
+
+        <h3>It does not estimate $P^{\star}_c$</h3>
+
+        <p>The chains $s_i$ are drawn from $p$. For any function $f$,</p>
+
+        $$
+        \frac{1}{N}\sum_{i=1}^N f(s_i)
+        \;\longrightarrow\;
+        \mathbb{E}_{s\sim p}[f(s)]
+        = \sum_s p(s)\,f(s).
+        $$
+
+        <p>Plugging $f(s)=\mathbb{1}[a(s)=a]$ recovers $P^{\star}_c(a)$. But the
+        forking-paths metric weights each chain by an <em>extra</em> factor of
+        $p(s_i)$, so the function being averaged is
+        $f(s)=p(s)\cdot \mathbb{1}[a(s)=a]$, and its expectation under $p$ picks
+        up an <em>extra</em> factor of $p$:</p>
+
+        $$
+        \frac{1}{N}\sum_i p(s_i)\,\mathbb{1}[a_i=a]
+        \;\longrightarrow\;
+        \sum_s p(s)^2\,\mathbb{1}[a(s)=a].
+        $$
+
+        <p>Dividing numerator by the analogously-reweighted denominator,</p>
+
+        $$
+        \widehat P^{\,w}_c(a)
+        \;\longrightarrow\;
+        \frac{\sum_s p(s)^2\,\mathbb{1}[a(s)=a]}{\sum_s p(s)^2},
+        $$
+
+        <p>which is $p$ renormalised by its <em>squared</em> probabilities.
+        High-probability chains are over-emphasised, low-probability ones
+        under-emphasised. This limit is not $P^{\star}_c$: the forking-paths
+        metric targets the wrong object even with infinite samples.</p>
+
+        <h3>Finite-sample: it collapses onto a single chain</h3>
+
+        <p>Far worse than the asymptotic bias, at realistic sample sizes ($N=32$)
+        and chain lengths ($T$ in the thousands) the weighted distribution is
+        numerically a <strong>delta on the chain with the largest $\log p$</strong> in the
+        batch.</p>
+
+        <p>The reason: the weight on chain $i$ is proportional to
+        $p(s_i) = \exp(\log p(s_i))$, and $\log p(s_i)$ is a sum of $T$
+        per-token log-probs. Even a per-token difference of $0.1$ nats between
+        two chains compounds into $0.1 \cdot T$ total; at $T=5000$ that is
+        already $500$ nats, so
+        $p(s_{\max})/p(s_{\text{second}}) = \exp(500)$ and the second-largest
+        weight is numerically zero. For all but absurdly short chains the
+        weighted distribution has exactly one non-zero entry — whichever chain
+        happens to be the argmax of $\log p$ in the batch.</p>
+
+        <h3>What that looks like on real data</h3>
+
+        <p>Chain log-probs across a batch of $N=32$ continuations from a
+        reasoning model (prefix: a math word problem plus a partial chain of
+        thought). Bars are sorted by log-prob, coloured by the chain's extracted
+        answer:</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/answer_kl/deepseek_logic_error_chain_logprobs.png"
+                 alt="Per-branch clean log-probs spanning several thousand nats.">
+            <figcaption><span class="fig-num">Fig. 1</span>Per-branch clean log-probs. The bars span roughly 5,000 nats end-to-end.</figcaption>
+          </div>
+        </figure>
+
+        <p>Exponentiating and normalising puts essentially all the weight on bar 0:</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/answer_kl/deepseek_logic_error_softmax_weights.png"
+                 alt="Forking-paths weights concentrated on the argmax chain.">
+            <figcaption><span class="fig-num">Fig. 2</span>Forking-paths weights. All mass concentrates on the argmax chain; every other weight is numerically zero.</figcaption>
+          </div>
+        </figure>
+
+        <p>And the answer distributions computed the two ways — plain frequency
+        (left) vs forking-paths weights (right) — disagree completely. The
+        frequency-based estimate shows a near-tie between two answers; the
+        forking-paths version collapses onto whichever answer the single argmax
+        chain happens to have:</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/answer_kl/deepseek_logic_error_p_clean.png"
+                 alt="Frequency-based P_c vs forking-paths P_c on Model A.">
+            <figcaption><span class="fig-num">Fig. 3</span>Frequency-based $P_c$ (left) vs forking-paths $P_c$ (right). The frequency estimate has spread across four answers; the weighted estimate is a delta on one.</figcaption>
+          </div>
+        </figure>
+
+        <p>The same collapse on a different model at a different analysis point,
+        with a much smaller per-token spread ($\approx 0.1$ nats/token) — still
+        total:</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/answer_kl/qwen3_t1265_softmax_weights.png"
+                 alt="Forking-paths weights on the second model — still a one-hot.">
+            <figcaption><span class="fig-num">Fig. 4</span>Forking-paths weights on the second model. Still a one-hot.</figcaption>
+          </div>
+        </figure>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/answer_kl/qwen3_t1265_p_clean.png"
+                 alt="Frequency vs forking-paths P_c on the second model.">
+            <figcaption><span class="fig-num">Fig. 5</span>Frequency vs forking-paths $P_c$ on the second model. Frequency gives $[0.63, 0.37]$; the weighted version puts everything on the losing answer.</figcaption>
+          </div>
+        </figure>
+
+        <p>The same pattern held in every configuration we tried (two prefixes
+        on Model A, three analysis points on Model B): the forking-paths
+        weighted distribution always had an effective sample size $\approx 1$
+        and always collapsed to a single chain, regardless of how spread out
+        the frequency-based answer distribution was.</p>
+
+        <h3>Consequences</h3>
+        <ul>
+          <li>The KL between two such distributions is the KL between two
+            one-hots: zero when the argmax chain under $p$ and the argmax chain
+            under $q$ have the same answer, $+\infty$ otherwise. It is an
+            indicator variable, not a continuous metric.</li>
+          <li>The gradient from all $N-1$ non-argmax chains is exactly zero.</li>
+          <li>Which chain wins is a stochastic function of the sampling seed:
+            the objective value depends on which batch of chains was drawn, not
+            on the underlying quantity it was supposed to measure.</li>
+        </ul>
+
+      </section>
+
+      <!-- ============================ TAB 3 =========================== -->
+      <section class="panel" id="tab3" role="tabpanel" aria-labelledby="tab3-btn">
+
+        <h2>Reward gap fails in exactly the same way — and is causally anti-correlated with correctness.</h2>
+
+        <h3>The same softmax collapse, applied to importance ratios</h3>
+
+        <p>Metric 1 (and therefore Metric 3, which is built on top of it) uses
+        self-normalised importance sampling. Its masked-side weight on chain
+        $i$ is proportional to $q(s_i)/p(s_i) = \exp(\ell_i)$, with</p>
+
+        $$
+        \ell_i = \log q(s_i) - \log p(s_i)
+        = \sum_{t=1}^{T}\bigl[\log q(x_t^{(i)}\mid x_{\lt t}^{(i)})
+                           - \log p(x_t^{(i)}\mid x_{\lt t}^{(i)})\bigr].
+        $$
+
+        <p>This is the same kind of object as $\log p(s_i)$ in Tab 2 — a sum of
+        $T$ per-token differences — and it collapses for the same reason. The
+        variance of $\ell_i$ grows linearly in $T$, so the spread between the
+        largest and median $\ell_i$ over the batch grows like $\sqrt T$ or
+        faster. At $T=20{,}000$ even per-token log-ratio differences of order
+        $10^{-3}$ nats push the spread well past $10$ nats, and the normalised
+        weights collapse to one-hot on the argmax chain:</p>
+
+        $$
+        w_{i^{\star}} \to 1,\qquad w_{j\ne i^{\star}}\to 0,\qquad
+        i^{\star} = \arg\max_i \ell_i.
+        $$
+
+        <p>In that regime $\widehat P_m(a) \approx \mathbb{1}[a = a_{i^{\star}}]$
+        and</p>
+
+        $$
+        \mathrm{reward\_gap}(M) \approx
+        \begin{cases}+1 & a_{i^{\star}} = A,\\ -1 & \text{otherwise.}\end{cases}
+        $$
+
+        <p>Empirically this happens on every mask we tried. The normalised
+        weights over the 32 chains, as a function of sparsity (one subplot per
+        sparsity, bars coloured by the chain's answer — green = correct):</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/per_chain_weights__reward_with_importance_sampling.png"
+                 alt="Per-chain normalised weights for the mask trained on reward-gap.">
+            <figcaption><span class="fig-num">Fig. 6</span>Per-chain normalised weights for the mask trained on reward gap. Every panel at sparsity $> 0$ is a one-hot; the mask parks that one-hot on a green (correct) chain for sparsities 5–50%.</figcaption>
+          </div>
+        </figure>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/per_chain_weights__thought_anchors_suppression.png"
+                 alt="Per-chain normalised weights for the thought-anchors-suppression mask.">
+            <figcaption><span class="fig-num">Fig. 7</span>Per-chain normalised weights for the thought-anchors-suppression mask (trained by forward suppression on Metric 1). Same one-hot pattern, parked on a red (incorrect) chain.</figcaption>
+          </div>
+        </figure>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/per_chain_weights__reward_with_local_kl.png"
+                 alt="Per-chain normalised weights for the local-KL mask.">
+            <figcaption><span class="fig-num">Fig. 8</span>Per-chain normalised weights for the mask trained on Metric 4 (local per-token KL). Same pattern, parked on different chains at different sparsities.</figcaption>
+          </div>
+        </figure>
+
+        <p>At sparsity $0$ every bar sits at the uniform baseline $1/N = 1/32$,
+        as it must. At every higher sparsity all three masks put essentially all
+        the weight on one chain.</p>
+
+        <div class="aside">
+          The reward-gap score of a mask is entirely determined by which bucket
+          the single surviving chain happens to belong to. Nothing else in the
+          batch is contributing any information.
+        </div>
+
+        <h3>What the optimiser actually has to do</h3>
+
+        <p>Given the collapse, maximising reward gap reduces to: find a mask $M$
+        and one pre-committed chain $i^{\star}$ in the correct-answer bucket
+        such that $\ell_{i^{\star}} > \ell_j$ for all $j\ne i^{\star}$. Writing
+        out the definition and rearranging,</p>
+
+        $$
+        \underbrace{\log q(s_{i^{\star}}) - \log q(s_j)}_{\text{depends on mask}}
+        \;>\;
+        \underbrace{\log p(s_{i^{\star}}) - \log p(s_j)}_{\text{fixed constant}},
+        \qquad \forall\, j \ne i^{\star}.
+        $$
+
+        <p>The right-hand side is $N-1$ fixed numbers. The optimiser just has to
+        deform the left-hand side — suppress attention edges that other chains
+        $j$ rely on while leaving the edges chain $i^{\star}$ relies on intact —
+        so that <strong>one pre-committed token sequence</strong> stays high-probability
+        under $q$ while $31$ others lose probability. This is a "single-chain
+        capture" objective: it has nothing to do with whether $q$ is a good
+        language model, and nothing to do with whether $q$ is more likely to
+        output the correct answer on fresh draws.</p>
+
+        <h3>Causal test: sample directly from the masked model</h3>
+
+        <p>The decisive check is to stop reweighting chains we already have,
+        and actually sample from $q$. Install each mask at the sparsity where
+        the reward-gap mask reads $+1.0$ (sparsity $0.10$), draw $32$ fresh
+        chains at the training temperature, and count correct answers:</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>mask</th>
+                <th>reward gap metric value</th>
+                <th>fraction of fresh samples that are correct</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>unmasked baseline</td>
+                <td>$-0.125$</td>
+                <td>$7/32 = 0.219$</td>
+              </tr>
+              <tr>
+                <td>mask trained on reward gap</td>
+                <td><strong>$+1.00$</strong></td>
+                <td><strong>$4/32 = 0.125$</strong></td>
+              </tr>
+              <tr>
+                <td>thought anchors (forward suppression)</td>
+                <td><strong>$\approx -1.00$</strong></td>
+                <td><strong>$9/32 = 0.281$</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>The ordering is <strong>inverted</strong>. The mask that scored $+1.0$ on the
+        reward-gap objective generates correct answers <em>less</em> often than the
+        unmasked baseline; the mask that scored $\approx -1.0$ generates them
+        <em>more</em> often. Optimising the metric has not just decoupled from the
+        quantity it was supposed to proxy — it is anti-correlated with it.</p>
+
+        <h3>Semantic audit — no human-readable structure in the top-scoring edges</h3>
+
+        <p>As a separate check, we asked a language-model judge, given the full
+        chain of thought, to rate each sentence (and each sentence-pair) in the
+        prefix for how much it pushes the reasoning toward the correct answer
+        vs toward the distractor answers, on a $[-2,+2]$ scale. If the learned
+        mask had captured semantically meaningful structure, its importance
+        scores on sentences/pairs should correlate with the judge's ratings.</p>
+
+        <p>Single-sentence view for each of the three masks. Each dot is one
+        sentence; $x$ is the mask's importance score for that sentence, $y$ is
+        the judge's bias score. None of the three masks shows a significant
+        positive correlation:</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/sentence_bias__reward_with_importance_sampling.png"
+                 alt="Sentence-level bias vs mask importance for the reward-gap mask.">
+            <figcaption><span class="fig-num">Fig. 9</span>Sentence-level bias vs mask importance for the reward-gap mask. Flat cloud; Spearman $\approx 0$.</figcaption>
+          </div>
+        </figure>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/sentence_bias__thought_anchors_suppression.png"
+                 alt="Sentence-level bias vs mask importance for the thought-anchors mask.">
+            <figcaption><span class="fig-num">Fig. 10</span>Sentence-level bias vs mask importance for the thought-anchors-suppression mask. Weakly reversed.</figcaption>
+          </div>
+        </figure>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/sentence_bias__reward_with_local_kl.png"
+                 alt="Sentence-level bias vs mask importance for the local-KL mask.">
+            <figcaption><span class="fig-num">Fig. 11</span>Sentence-level bias vs mask importance for the local-KL mask. Most reversed of the three.</figcaption>
+          </div>
+        </figure>
+
+        <p>Pair view (top-50 vs bottom-50 pairs by mask score) tells the same
+        story. The reward-gap mask is flat; the thought-anchors mask is weakly
+        reversed; the local-KL mask is significantly reversed (its "most
+        important" edges are the ones the judge rates as most pushing the
+        reasoning <em>toward</em> the wrong answers):</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/pair_bias__reward_with_importance_sampling.png"
+                 alt="Pair-level bias vs mask score for the reward-gap mask.">
+            <figcaption><span class="fig-num">Fig. 12</span>Pair-level bias vs mask score for the reward-gap mask.</figcaption>
+          </div>
+        </figure>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/pair_bias__thought_anchors_suppression.png"
+                 alt="Pair-level bias vs mask score for the thought-anchors mask.">
+            <figcaption><span class="fig-num">Fig. 13</span>Pair-level bias vs mask score for the thought-anchors-suppression mask.</figcaption>
+          </div>
+        </figure>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/reward_gap_goodhart/pair_bias__reward_with_local_kl.png"
+                 alt="Pair-level bias vs mask score for the local-KL mask.">
+            <figcaption><span class="fig-num">Fig. 14</span>Pair-level bias vs mask score for the local-KL mask. Significantly reversed — top-scored edges push toward incorrect answers.</figcaption>
+          </div>
+        </figure>
+
+        <h3>The shared underlying failure</h3>
+
+        <p>Tabs 2 and 3 are the same bug. Both the forking-paths outcome
+        distribution and the reward gap under self-normalised importance
+        sampling take a batch of length-$T$ chains, compute one number per
+        chain as a sum of $T$ per-token quantities, and then normalise those
+        numbers into a probability distribution over the batch. As soon as
+        $T$ is large enough that the spread of the per-chain sums exceeds a
+        few tens of nats — which happens at $T$ in the hundreds, never mind
+        the thousands we actually use — the normalised distribution is
+        numerically a one-hot on the argmax chain, and any objective built on
+        top of it degenerates into <em>"did the argmax chain happen to be in the
+        target answer bucket?"</em>.</p>
+
+      </section>
+
+      <div class="endnote">End of notes · 14 · IV · 2026</div>
+
+    </div>
+  </main>
+</div>
+
+<script src="../assets/shell.js"></script>
+
+</body>
+</html>

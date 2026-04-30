@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Tempering the softmax — 21 April 2026</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=Source+Serif+4:opsz,wght@8..60,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="../assets/theme.css">
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      processEscapes: true
+    },
+    chtml: { scale: 1.02 },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+
+<body data-slug="2026-04-21">
+
+<button class="nav-toggle" type="button" aria-label="Open meetings menu">≡</button>
+<div class="nav-scrim" aria-hidden="true"></div>
+
+<div class="app">
+
+  <aside class="sidebar" aria-label="Meeting navigation"></aside>
+
+  <main class="content">
+    <div class="shell">
+
+      <header class="masthead">
+        <div class="kicker">Research log · RL interpretability</div>
+        <h1>Tempering the <em>softmax</em>, one chain at a time.</h1>
+        <p class="deck">
+          Three ways to rescale log-importance ratios before the batch softmax —
+          how each one bends per-chain sensitivity, and what happens when we
+          actually ablate the edges they disagree on.
+        </p>
+        <div class="byline">
+          <span>21 April 2026</span>
+          <span class="dot"></span>
+          <span>Meeting notes</span>
+          <span class="dot"></span>
+          <span>Reading time ~ 10 min</span>
+        </div>
+      </header>
+
+      <div class="tabs-wrap">
+        <div class="tabs" role="tablist">
+          <button class="tab-btn" role="tab" id="tab1-btn" aria-controls="tab1" aria-selected="true"
+                  data-target="tab1"><span class="num">01</span>IS variants</button>
+          <button class="tab-btn" role="tab" id="tab2-btn" aria-controls="tab2" aria-selected="false"
+                  data-target="tab2"><span class="num">02</span>Per-chain sensitivity</button>
+          <button class="tab-btn" role="tab" id="tab3-btn" aria-controls="tab3" aria-selected="false"
+                  data-target="tab3"><span class="num">03</span>Correctness &amp; disagreement</button>
+        </div>
+      </div>
+
+      <!-- ============================ TAB 1 =========================== -->
+      <section class="panel" id="tab1" role="tabpanel" aria-labelledby="tab1-btn" data-active="true">
+
+        <h2>Three transforms of the per-chain log-ratio, one shared softmax.</h2>
+
+        <p>All three methods share the same setup: $N$ continuations $y^{(i)}$
+        drawn from the clean proposal $q$, each with a per-chain log-importance
+        ratio</p>
+
+        $$
+        \ell_i \;=\; \log\frac{p(y^{(i)})}{q(y^{(i)})}
+        \;=\; \sum_{t=1}^{T_i}\Big[\log p(y^{(i)}_t \mid y^{(i)}_{\lt t})
+                               - \log q(y^{(i)}_t \mid y^{(i)}_{\lt t})\Big],
+        $$
+
+        <p>and a stable batch softmax</p>
+
+        $$
+        w_i \;=\; \frac{\exp(s_i - \max_j s_j)}{\sum_{k} \exp(s_k - \max_j s_j)}.
+        $$
+
+        <p>The three variants differ only in the transform $s_i = f(\ell_i)$.</p>
+
+        <div class="method-card">
+          <div class="method-tag">Variant 01</div>
+          <div class="method-title"><code>snis</code> — self-normalised IS</div>
+
+          <p class="method-eq">
+            $$ \boxed{\; s_i \;=\; \ell_i \;} $$
+          </p>
+          <p class="method-eq-expand">
+            $$ w_i \;=\; \frac{p(y^{(i)})/q(y^{(i)})}{\sum_k p(y^{(k)})/q(y^{(k)})}. $$
+          </p>
+
+          <p class="method-note">Unbiased in the limit; collapses to a one-hot
+          weight on long chains because $\mathrm{Var}(\ell_i) = \Theta(T_i)$.</p>
+        </div>
+
+        <div class="method-card">
+          <div class="method-tag">Variant 02</div>
+          <div class="method-title"><code>geometric_mean</code> — per-chain length normalisation</div>
+
+          <p class="method-eq">
+            $$ \boxed{\; s_i \;=\; \frac{\ell_i}{\max(T_i,\,1)} \;} $$
+          </p>
+          <p class="method-eq-expand">
+            $$ \exp(s_i) \;=\; \left(\frac{p(y^{(i)})}{q(y^{(i)})}\right)^{1/T_i}. $$
+          </p>
+
+          <p class="method-note">Replace the product of per-token ratios with
+          their geometric mean. Decouples scale from chain length, but
+          over-corrects on long chains — softmax inputs collapse to $\approx 0$
+          and weights sit at $1/N$ within $10^{-4}$.</p>
+        </div>
+
+        <div class="method-card">
+          <div class="method-tag">Variant 03</div>
+          <div class="method-title"><code>tempered_snis</code> — fixed-temperature SNIS</div>
+
+          <p class="method-eq">
+            $$ \boxed{\; s_i \;=\; \frac{\ell_i}{T}, \quad T > 0 \text{ scalar} \;} $$
+          </p>
+          <p class="method-eq-expand">
+            $$ w_i \;=\; \frac{\exp(\ell_i / T)}{\sum_{k}\exp(\ell_k / T)}. $$
+          </p>
+
+          <p class="method-note">$T = 1$ recovers SNIS; $T \to \infty$ recovers
+          uniform weights. $T$ is one scalar for the whole batch, not tied to
+          chain length. Recommended: $T \approx \mathrm{std}(\ell_i)$ — in this
+          project, $T \approx 5$.</p>
+        </div>
+
+        <h3>Side-by-side</h3>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>method</th>
+                <th>transform $s_i$</th>
+                <th>$N_{\text{eff}}$ on long chains</th>
+                <th>unbiased for $P_p$?</th>
+                <th>knob tied to $T_i$?</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>snis</code></td>
+                <td>$\ell_i$</td>
+                <td>collapses $\to 1$</td>
+                <td>yes (asymptotically)</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>geometric_mean</code></td>
+                <td>$\ell_i / T_i$</td>
+                <td>collapses $\to N$ (uniform)</td>
+                <td>no</td>
+                <td>yes (per-chain)</td>
+              </tr>
+              <tr>
+                <td><code>tempered_snis</code></td>
+                <td>$\ell_i / T$, fixed $T$</td>
+                <td><strong>tunable via $T$</strong></td>
+                <td>no</td>
+                <td>no (global scalar)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Endpoints of <code>tempered_snis</code>: $T = 1 \Rightarrow$
+        <code>snis</code>; $T = T_i$ per chain $\Rightarrow$
+        <code>geometric_mean</code>. So <code>geometric_mean</code> is the
+        per-chain special case of tempering, and <code>snis</code> is tempering
+        with $T = 1$. <code>tempered_snis</code> is the only one of the three
+        whose scale you can actually tune to match the observed log-weight
+        spread.</p>
+
+        <div class="aside">
+          Rule of thumb: aim for $T \approx \mathrm{std}(\ell_i)$ so that
+          $N_{\text{eff}}/N \gtrsim 0.5$. For the multi-thousand-token chains in
+          this project, that is roughly $T = 5$ — three orders of magnitude
+          smaller than what <code>geometric_mean</code> effectively applies.
+        </div>
+
+      </section>
+
+      <!-- ============================ TAB 2 =========================== -->
+      <section class="panel wide-panel" id="tab2" role="tabpanel" aria-labelledby="tab2-btn">
+
+        <h2>How each variant reacts to per-chain threshold — and where sensitivity disappears.</h2>
+
+        <p>For each tempering we plot three things across ablation sparsity:
+        effective sample size $N_{\text{eff}}$, normalised per-chain weights at
+        a <em>low</em> sparsity cutoff, and per-chain weights at a <em>high</em>
+        sparsity cutoff. The contrast between the two chain panels is the
+        sensitivity story — how dramatically the softmax re-weights as we
+        tighten the threshold.</p>
+
+        <ul>
+          <li><strong>Temp. 5</strong> — chains are sensitive to threshold, but
+          collapse into a one-hot on the high-threshold panel.</li>
+          <li><strong>Temp. 20</strong> — keeps spread across thresholds; no
+          one-hot collapse.</li>
+          <li><strong>Temp. 100</strong> — nearly flat response; the weights
+          barely move.</li>
+          <li><strong>Geometric mean</strong> — effectively uniform across
+          sparsities. Chain panel is identical at any threshold, so we show it
+          once.</li>
+        </ul>
+
+        <div class="sens-grid-header">
+          <div>method</div>
+          <div>$N_{\text{eff}}$ vs sparsity</div>
+          <div>Chains — low threshold</div>
+          <div>Chains — high threshold</div>
+        </div>
+
+        <div class="sens-row">
+          <div class="sens-label">
+            <div class="sens-name"><code>tempered_snis</code></div>
+            <div class="sens-sub">T = 5</div>
+            <div class="sens-desc">Sensitive across the sparsity axis, but the high-threshold weights collapse onto a single chain.</div>
+          </div>
+          <div class="sens-cell"><img src="images/t5_n_eff.png" alt="N_eff vs sparsity at temp. 5"></div>
+          <div class="sens-cell"><img src="images/t5_chains.png" alt="Per-chain weights at temp. 5, low threshold"></div>
+          <div class="sens-cell"><img src="images/t_5_high_sparse_chains.png" alt="Per-chain weights at temp. 5, high threshold"></div>
+        </div>
+
+        <div class="sens-row">
+          <div class="sens-label">
+            <div class="sens-name"><code>tempered_snis</code></div>
+            <div class="sens-sub">T = 20</div>
+            <div class="sens-desc">No collapse at the high threshold — weights stay spread across chains.</div>
+          </div>
+          <div class="sens-cell"><img src="images/t_20_n_eff.png" alt="N_eff vs sparsity at temp. 20"></div>
+          <div class="sens-cell"><img src="images/t_20_chains.png" alt="Per-chain weights at temp. 20, low threshold"></div>
+          <div class="sens-cell"><img src="images/t_20_high_sparse_chains.png" alt="Per-chain weights at temp. 20, high threshold"></div>
+        </div>
+
+        <div class="sens-row">
+          <div class="sens-label">
+            <div class="sens-name"><code>tempered_snis</code></div>
+            <div class="sens-sub">T = 100</div>
+            <div class="sens-desc">Barely responsive to threshold; the softmax is so cold it ignores the score spread.</div>
+          </div>
+          <div class="sens-cell"><img src="images/t_100_n_eff.png" alt="N_eff vs sparsity at temp. 100"></div>
+          <div class="sens-cell"><img src="images/t100_chains.png" alt="Per-chain weights at temp. 100, low threshold"></div>
+          <div class="sens-cell"><img src="images/t_100_high_sparse_chains.png" alt="Per-chain weights at temp. 100, high threshold"></div>
+        </div>
+
+        <div class="sens-row">
+          <div class="sens-label">
+            <div class="sens-name"><code>geometric_mean</code></div>
+            <div class="sens-sub">s<sub>i</sub> = ℓ<sub>i</sub> / T<sub>i</sub></div>
+            <div class="sens-desc">Chain weights are indistinguishable at any threshold — the length normalisation kills the signal entirely.</div>
+          </div>
+          <div class="sens-cell"><img src="images/geometric_mean_n_eff.png" alt="N_eff vs sparsity, geometric mean"></div>
+          <div class="sens-cell reused"><img src="images/geometric_mean_chains.png" alt="Per-chain weights, geometric mean"></div>
+          <div class="sens-cell empty">same panel · threshold-independent</div>
+        </div>
+
+        <div class="aside" style="max-width: var(--measure); margin-left:auto; margin-right:auto; margin-top: 34px;">
+          Sensitivity increases as $T$ drops — but only usefully up to a point.
+          At $T = 5$ the high-threshold softmax has already crossed into
+          one-hot territory, so any downstream score that multiplies these
+          weights gets driven by a single chain again. $T = 20$ is the cleanest
+          middle ground: visibly responsive to threshold without collapsing.
+        </div>
+
+      </section>
+
+      <!-- ============================ TAB 3 =========================== -->
+      <section class="panel wide-panel" id="tab3" role="tabpanel" aria-labelledby="tab3-btn">
+
+        <h2>What actually happens to correctness when we ablate the edges each variant disagrees on.</h2>
+
+        <h3>§ 1 · Resample correctness across sparsity</h3>
+
+        <p>For each mask, install it at the given sparsity, regenerate $N=32$
+        chains from the masked model at training temperature, and count how
+        many answer correctly. The four <code>reward_gap</code> masks only
+        differ in their IS transform; a fifth mask trained with
+        <code>answer_kl</code> (thought-anchors suppression) is included as a
+        sanity baseline with a different objective.</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/importance_sampling_variants/resample_subset_fraction_correct.png"
+                 alt="Fraction correct on resampled chains vs ablation sparsity for each mask.">
+            <figcaption><span class="fig-num">Fig. 1</span>Fraction correct among 32 fresh samples from each masked model, as a function of ablation sparsity. <code>temp. 100</code> at 10% sparsity lands near 75% — every other mask sits below 57% at the same sparsity. The spike is not monotone in $T$ and isolates to a specific set of ablated edges (see §3).</figcaption>
+          </div>
+        </figure>
+
+        <h3>§ 2 · Most pairs of masks are nearly colinear</h3>
+
+        <p>We compare per-pair scores of the four <code>reward_gap</code> masks
+        plus the <code>answer_kl</code> baseline, all sharing the same causal
+        support of 1,035 sentence pairs. In the plain scatter, points cluster
+        within a narrow band around a common mean ($\approx 0.063$), so
+        proximity to the $y=x$ line mostly means "both axes are near-constant".
+        To remove the trivial scale we subtract each mask's mean and rescale the
+        $y$ axis by</p>
+
+        $$
+        \alpha \;=\; \frac{\mathbb{E}[|x-\bar x|]}{\mathbb{E}[|y-\bar y|]}
+        $$
+
+        <p>so both axes have matched magnitudes. After rescaling, the diagonal
+        represents genuine rank/direction agreement.</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/importance_sampling_variants/is_mask_scatter_rescaled.png"
+                 alt="Pairwise scatter, rescaled so both axes carry matched magnitudes.">
+            <figcaption><span class="fig-num">Fig. 2</span>Pairwise scatter, magnitude-matched. Within the <code>reward_gap</code> family the data really does sit on $y=x$ once the trivial scale is removed; thought anchors (<code>answer_kl</code>) is genuinely orthogonal — the point clouds in the last row/column are round, not diagonal.</figcaption>
+          </div>
+        </figure>
+
+        <p>Spearman $\rho \ge 0.977$ between any two <code>reward_gap</code>
+        masks; $|\rho| &lt; 0.04$ between the <code>answer_kl</code> mask and
+        any of them. Choice of IS temperature moves the tails of the same
+        ranking; choice of <em>objective</em> changes which pairs the mask cares
+        about at all.</p>
+
+        <h3>§ 3 · Where the masks disagree — an interactive walk</h3>
+
+        <p>Even inside the high-correlation <code>reward_gap</code> family, a
+        handful of pairs swing their within-mask percentile by 70+ points
+        across different tempering $T$s. Select any pair below to see the two
+        sentences and where each mask places the pair in its 1,035-pair
+        distribution.</p>
+
+        <div class="widget-frame">
+          <div class="widget-body">
+            <div>
+              <div class="pair-list-head">
+                <span>#</span>
+                <span>pair</span>
+                <span class="pair-spread">spread</span>
+              </div>
+              <ul class="pair-list" id="pair-list" role="listbox" aria-label="Pairs sorted by rank spread"></ul>
+            </div>
+
+            <div class="detail-panel" id="detail-panel"></div>
+          </div>
+
+          <div class="widget-legend">
+            <strong>Spread</strong> = max percentile − min percentile across the
+            four <code>reward_gap</code> masks. Highlighted (shaded) percentiles
+            mark a swing of ≥ 70 points across the <code>reward_gap</code>
+            ladder, or a top-decile score under <code>answer_kl</code>.
+            Sentences $s_i$ and $s_j$ are drawn from the same 49-sentence CoT
+            trace on a full-house dice problem.
+          </div>
+        </div>
+
+        <h3>Takeaways from the disagreements</h3>
+
+        <ul>
+          <li><strong>Restatement pairs are amplified by low $T$ (and by
+          thought anchors).</strong> Pair (10, 1) — two near-identical
+          restatements of the problem setup — sits at the 7th percentile under
+          temp. 100 and jumps to the 98th under temp. 5. Under
+          <code>answer_kl</code> it is the top-scoring pair in the whole mask
+          (100th pct, raw 2.44). Pair (14, 10), structurally the same kind of
+          restatement, swings the opposite way (38 → 2). Low-$T$ leverage here
+          is idiosyncratic to individual chain log-ratios.</li>
+
+          <li><strong>Case-analysis pairs move together.</strong> (36, 0),
+          (36, 20), (47, 41), (26, 20) all connect a concrete full-house case
+          statement back to the setup or an earlier case. Tempering pushes them
+          from mid to upper quartile as $T$ drops; thought anchors mostly
+          agrees that they matter, though the ranking differs.</li>
+
+          <li><strong>Thought anchors picks a disjoint set.</strong> Pairs like
+          (25, 19), (20, 16), (38, 5) sit at or below the 60th percentile in
+          every <code>reward_gap</code> mask but at the 86–98th percentile
+          under <code>answer_kl</code>. Whatever <code>answer_kl</code> is
+          tracking for these pairs is largely invisible to
+          <code>reward_gap</code>.</li>
+        </ul>
+
+        <h3>Where do the disagreements sit in each mask's distribution?</h3>
+
+        <p>For the top-12 outliers above, counting how many fall in each mask's
+        bottom 10%, middle 80%, and top 10%:</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>mask</th>
+                <th>bottom 10%</th>
+                <th>middle 80%</th>
+                <th>top 10%</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>geometric mean</td><td>3</td><td>9</td><td>0</td></tr>
+              <tr><td>temp. 100</td><td>1</td><td>11</td><td>0</td></tr>
+              <tr><td>temp. 20</td><td>0</td><td>12</td><td>0</td></tr>
+              <tr><td>temp. 5</td><td>2</td><td>9</td><td>1</td></tr>
+              <tr><td>thought anchors</td><td>0</td><td>5</td><td>7</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Inside the <code>reward_gap</code> family the disagreements are
+        overwhelmingly in the <strong>middle</strong> of each distribution
+        (≥ 90% of outliers at pct 10–90). Bottom-10% sets overlap heavily:
+        104 entries each, with pairwise intersections of 93–103 / 104. Thought
+        anchors is the exception — its disagreements sit mostly in its
+        <em>top</em> 10%.</p>
+
+        <h3>Why does temp. 100 spike at 10% sparsity?</h3>
+
+        <p>At 10% sparsity each mask ablates the edges whose scores fall in its
+        bottom 104. Temp. 100 and temp. 20 differ on exactly two pairs: temp.
+        100 uniquely ablates <strong>(10, 1)</strong>; temp. 20 uniquely ablates
+        (34, 8). Everything else is shared. Pair (10, 1) is the #1 row in the
+        disagreement widget above — near-identical restatements of the problem
+        setup:</p>
+
+        <div class="aside">
+          Ablating the attention between two redundant restatements plausibly
+          frees capacity for real reasoning — a single-pair intervention that
+          the 10%-sparsity curve promotes to a +30 point fraction-correct gap
+          against temp. 20. The outlier table explains this gap; it does
+          <em>not</em> fully explain why temp. 100 beats geometric mean at the
+          same sparsity, since both ablate (10, 1) but differ on 16 other
+          mid-rank pairs the top-12 table does not highlight.
+        </div>
+
+      </section>
+
+      <div class="endnote">End of notes · 21 · IV · 2026</div>
+
+    </div>
+  </main>
+</div>
+
+<script src="../assets/shell.js"></script>
+
+<script>
+  /* ------------------- Disagreement widget (page-specific) ------------------- */
+  (function () {
+    const SENTENCES = {
+      0:  "Each of five, standard, six-sided dice is rolled once.",
+      1:  "Two of the dice come up the same, but the other three are all different from those two and different from each other.",
+      2:  "The pair is set aside, and the other three dice are re-rolled.",
+      3:  "The dice are said to show a “full house” if three of the dice show the same value and the other two show the same value (and potentially, but not necessarily, all five dice show the same value).",
+      5:  "<code>&lt;|im_end|&gt; &lt;|im_start|&gt;assistant &lt;think&gt;</code> Okay, so I need to find the probability that after re-rolling three dice, the five dice show a full house.",
+      10: "The problem says that initially, five dice are rolled, and two of them come up the same, while the other three are all different from each other and from the pair.",
+      14: "Initially, five dice are rolled. Out of these five, two are the same, and the other three are all different from each other and also different from the pair.",
+      16: "Then, after re-rolling those three, we check if the entire set of five dice (the original pair plus the three re-rolled) form a full house.",
+      19: "Therefore, the full house could be either: 1.",
+      20: "The original pair plus two of the re-rolled dice matching the original pair, making a three-of-a-kind and the other three re-rolled dice making another pair?",
+      25: "Then, if after re-rolling the three dice, we have either:",
+      26: "The three re-rolled dice include one of the same number as the original pair, making a total of three of that number, and the remaining two re-rolled dice form a pair.",
+      30: "Alternatively, could there be another way? For example, if after re-rolling, the three re-rolled dice include two of a different number and one of another, but combined with the original pair, maybe?",
+      36: "Or: The three re-rolled dice form a three-of-a-kind, and the original pair is a pair.",
+      38: "Alternatively, could the three re-rolled dice form a pair and a single, and the original pair plus the single?",
+      41: "Case 1: The original pair is the three-of-a-kind, and the three re-rolled dice include one die of the original pair's number and two of another number (so that the three re-rolled dice have one of the original pair's number and a pair of another number).",
+      47: "So that's also a full house. Therefore, the total probability is the probability of Case 1 plus the probability of Case 2."
+    };
+
+    const MASKS = [
+      { key: "gm",   label: "geometric mean",  code: "geometric_mean" },
+      { key: "t100", label: "temp. 100",        code: "tempered_snis T=100" },
+      { key: "t20",  label: "temp. 20",         code: "tempered_snis T=20" },
+      { key: "t5",   label: "temp. 5",          code: "tempered_snis T=5" },
+      { key: "ta",   label: "thought anchors",  code: "answer_kl (sanity)" }
+    ];
+
+    const PAIRS = [
+      [1,  10, 1,  { gm:[0, "6.243e-02"],  t100:[7, "6.129e-02"],  t20:[22, "6.013e-02"], t5:[98, "1.062e-01"],  ta:[100,"2.435e+00"] }],
+      [2,  36, 20, { gm:[5, "6.248e-02"],  t100:[19,"6.193e-02"],  t20:[25, "6.051e-02"], t5:[50, "6.631e-02"],  ta:[60, "5.994e-03"] }],
+      [3,  36, 0,  { gm:[39,"6.250e-02"],  t100:[56,"6.281e-02"],  t20:[61, "6.461e-02"], t5:[78, "7.912e-02"],  ta:[16, "1.641e-03"] }],
+      [4,  14, 10, { gm:[4, "6.248e-02"],  t100:[38,"6.240e-02"],  t20:[24, "6.027e-02"], t5:[2,  "2.736e-02"],  ta:[99, "3.219e-01"] }],
+      [5,  25, 19, { gm:[52,"6.250e-02"],  t100:[38,"6.241e-02"],  t20:[35, "6.162e-02"], t5:[22, "5.265e-02"],  ta:[98, "1.626e-01"] }],
+      [6,  20, 16, { gm:[32,"6.250e-02"],  t100:[44,"6.255e-02"],  t20:[47, "6.306e-02"], t5:[57, "6.960e-02"],  ta:[86, "2.350e-02"] }],
+      [7,  47, 41, { gm:[65,"6.251e-02"],  t100:[80,"6.339e-02"],  t20:[83, "6.739e-02"], t5:[89, "8.725e-02"],  ta:[93, "5.107e-02"] }],
+      [8,  10, 3,  { gm:[24,"6.249e-02"],  t100:[39,"6.241e-02"],  t20:[40, "6.232e-02"], t5:[46, "6.507e-02"],  ta:[86, "2.536e-02"] }],
+      [9,  26, 20, { gm:[64,"6.250e-02"],  t100:[82,"6.344e-02"],  t20:[83, "6.740e-02"], t5:[85, "8.350e-02"],  ta:[98, "1.633e-01"] }],
+      [10, 38, 5,  { gm:[60,"6.250e-02"],  t100:[74,"6.321e-02"],  t20:[75, "6.622e-02"], t5:[80, "8.003e-02"],  ta:[90, "3.496e-02"] }],
+      [11, 20, 2,  { gm:[71,"6.251e-02"],  t100:[55,"6.279e-02"],  t20:[54, "6.388e-02"], t5:[51, "6.666e-02"],  ta:[91, "4.143e-02"] }],
+      [12, 30, 3,  { gm:[17,"6.249e-02"],  t100:[30,"6.220e-02"],  t20:[31, "6.116e-02"], t5:[37, "5.976e-02"],  ta:[90, "3.498e-02"] }]
+    ];
+
+    const listEl = document.getElementById('pair-list');
+    const detailEl = document.getElementById('detail-panel');
+    if (!listEl || !detailEl) return;
+
+    PAIRS.forEach(([rank, i, j, scores], idx) => {
+      const pcts = ['gm','t100','t20','t5'].map(k => scores[k][0]);
+      const spread = Math.max(...pcts) - Math.min(...pcts);
+
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.className = 'pair-btn';
+      btn.setAttribute('role','option');
+      btn.setAttribute('aria-selected', idx === 0 ? 'true' : 'false');
+      btn.dataset.index = idx;
+      btn.innerHTML = `
+        <span class="pair-rank">#${rank}</span>
+        <span class="pair-label">(${i}, ${j}) <em>s${i} ↔ s${j}</em></span>
+        <span class="pair-spread">${spread}</span>
+      `;
+      btn.addEventListener('click', () => render(idx));
+      li.appendChild(btn);
+      listEl.appendChild(li);
+    });
+
+    function render(idx) {
+      document.querySelectorAll('#pair-list .pair-btn').forEach((b, bi) => {
+        b.setAttribute('aria-selected', bi === idx ? 'true' : 'false');
+      });
+
+      const [rank, i, j, scores] = PAIRS[idx];
+      const rewardPcts = ['gm','t100','t20','t5'].map(k => scores[k][0]);
+      const minR = Math.min(...rewardPcts);
+      const maxR = Math.max(...rewardPcts);
+      const taPct = scores.ta[0];
+
+      const rowHtml = MASKS.map(m => {
+        const [pct, val] = scores[m.key];
+        const isSanity = m.key === 'ta';
+        let bold = false;
+        if (!isSanity) {
+          if ((maxR - minR) >= 70 && (pct === minR || pct === maxR)) bold = true;
+        } else if (pct >= 90) {
+          bold = true;
+        }
+        const barClass = isSanity ? 'rank-bar sanity' : 'rank-bar';
+        const rowClass = isSanity ? 'rank-row sanity' : 'rank-row';
+        return `
+          <div class="${rowClass}">
+            <div class="mask-name">${m.label}<br><code style="font-size:11px;">${m.code}</code></div>
+            <div class="rank-bar-track"><div class="${barClass}" style="width: ${pct}%;"></div></div>
+            <div class="rank-value ${bold ? 'bold-cell' : ''}">
+              <span class="pct">${pct}</span><br>
+              <span class="val">${val}</span>
+            </div>
+          </div>`;
+      }).join('');
+
+      detailEl.innerHTML = `
+        <h3 class="pair-title" style="border:none; padding:0; margin:0 0 4px;">
+          Pair <em>(${i}, ${j})</em> &nbsp;<span style="font-family:var(--mono); font-size:12px; color: var(--muted); letter-spacing:0.1em;">#${rank}</span>
+        </h3>
+        <p class="pair-sub">spread ${maxR - minR} pct &middot; reward_gap ${minR}–${maxR} &middot; answer_kl ${taPct}</p>
+
+        <div class="sentence-pair">
+          <div class="sentence-block">
+            <span class="sent-id">s${i}</span>
+            <span class="sent-text">${SENTENCES[i] ?? '(sentence not listed)'}</span>
+          </div>
+          <div class="sentence-block">
+            <span class="sent-id">s${j}</span>
+            <span class="sent-text">${SENTENCES[j] ?? '(sentence not listed)'}</span>
+          </div>
+        </div>
+
+        <div class="ranks-block">
+          <h4>Percentile within each mask</h4>
+          ${rowHtml}
+        </div>
+      `;
+    }
+
+    render(0);
+  })();
+</script>
+
+</body>
+</html>

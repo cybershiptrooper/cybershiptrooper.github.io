@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>CoT Interp — research log</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=Source+Serif+4:opsz,wght@8..60,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="assets/theme.css">
+
+<style>
+  /* landing-only layout: a quiet index of the collection */
+
+  .index-grid {
+    list-style: none;
+    margin: 36px 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0;
+    border-top: 1px solid var(--rule);
+  }
+  .index-card {
+    display: block;
+    padding: 28px 26px 30px;
+    text-decoration: none;
+    color: inherit;
+    border-bottom: 1px solid var(--rule-soft);
+    border-right: 1px solid var(--rule-soft);
+    background: var(--surface);
+    position: relative;
+    transition: transform 220ms cubic-bezier(.2,.8,.2,1), background 220ms ease;
+  }
+  .index-card::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    transform: scaleY(0);
+    transform-origin: top center;
+    transition: transform 240ms cubic-bezier(.2,.8,.2,1);
+  }
+  .index-card:hover {
+    background: var(--bg-deep);
+    transform: translateY(-2px);
+  }
+  .index-card:hover::before { transform: scaleY(1); }
+
+  .index-card .idx-num {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--accent-deep);
+    margin-bottom: 8px;
+  }
+  .index-card .idx-date {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .index-card .idx-title {
+    font-family: var(--serif-display);
+    font-variation-settings: "SOFT" 35, "opsz" 30;
+    font-weight: 440;
+    font-size: 22px;
+    line-height: 1.18;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 0 0 10px;
+  }
+  .index-card .idx-title em {
+    font-style: italic;
+    color: var(--accent-deep);
+  }
+  .index-card .idx-sub {
+    font-family: var(--serif-body);
+    font-style: italic;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--muted);
+    margin: 0;
+  }
+  .index-card .idx-arrow {
+    display: inline-block;
+    margin-top: 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 10px;
+    transition: color 200ms ease;
+  }
+  .index-card:hover .idx-arrow { color: var(--accent-deep); }
+
+  .lede {
+    max-width: var(--measure);
+    margin-bottom: 24px;
+  }
+  .lede p {
+    color: var(--ink-soft);
+    font-size: 19px;
+    line-height: 1.6;
+    margin: 0 0 14px;
+  }
+  .lede .keyline {
+    display: inline-block;
+    width: 60px;
+    height: 1px;
+    background: var(--accent);
+    margin: 8px 0 18px;
+  }
+
+  .runic {
+    font-family: var(--serif-display);
+    font-size: 13px;
+    font-style: italic;
+    color: var(--muted);
+    margin-top: 36px;
+    padding-top: 22px;
+    border-top: 1px solid var(--rule-soft);
+    max-width: var(--measure);
+  }
+  .runic code {
+    background: var(--code-bg);
+    color: var(--accent-deep);
+    font-style: normal;
+  }
+</style>
+
+</head>
+
+<body data-slug="__index__">
+
+<button class="nav-toggle" type="button" aria-label="Open meetings menu">≡</button>
+<div class="nav-scrim" aria-hidden="true"></div>
+
+<div class="app">
+
+  <aside class="sidebar" aria-label="Meeting navigation"></aside>
+
+  <main class="content">
+    <div class="shell narrow">
+
+      <header class="masthead">
+        <div class="kicker">Research log · RL interpretability</div>
+        <h1>Reading <em>chains of</em> thought.</h1>
+        <p class="deck">
+          A weekly log of attention-mask experiments on chain-of-thought
+          reasoning models — what works, what doesn't, and why.
+        </p>
+        <div class="byline">
+          <span>Private collection</span>
+          <span class="dot"></span>
+          <span>Not indexed</span>
+          <span class="dot"></span>
+          <span id="meeting-count">— meetings</span>
+        </div>
+      </header>
+
+      <div class="lede">
+        <p>Each entry is a self-contained dossier on a specific question we
+        chased that week — usually some failure mode of a metric, an
+        unexpected phenomenon in the masks we trained, or a methodological
+        thread that needed to be pulled.</p>
+        <span class="keyline"></span>
+        <p>Newest first. The sidebar is the canonical index.</p>
+      </div>
+
+      <ul class="index-grid" id="index-grid"></ul>
+
+      <p class="runic">
+        Direct URL only — there are no inbound links, no sitemap, no search.
+        Bookmark this page or the specific meeting you want, and share the
+        URL only with people you'd like to read it. <code>noindex,nofollow</code>
+        is set per page, and the path is intentionally not advertised.
+      </p>
+
+    </div>
+  </main>
+</div>
+
+<script src="assets/shell.js"></script>
+<script>
+  (function () {
+    const grid = document.getElementById('index-grid');
+    const count = document.getElementById('meeting-count');
+    if (!grid || !window.CotInterp) return;
+
+    const { MEETINGS, basePath } = window.CotInterp;
+    const base = basePath();
+
+    count.textContent = `${MEETINGS.length} meeting${MEETINGS.length === 1 ? '' : 's'}`;
+
+    grid.innerHTML = MEETINGS.map((m, i) => {
+      const num = String(MEETINGS.length - i).padStart(2, '0');
+      return `
+        <li>
+          <a class="index-card" href="${base}${m.slug}/">
+            <div class="idx-num">№ ${num}</div>
+            <div class="idx-date">${m.date}</div>
+            <div class="idx-title">${m.title}</div>
+            <p class="idx-sub">${m.sub}</p>
+            <span class="idx-arrow">Read meeting →</span>
+          </a>
+        </li>
+      `;
+    }).join('');
+  })();
+</script>
+
+</body>
+</html>
