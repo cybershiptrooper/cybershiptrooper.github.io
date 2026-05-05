@@ -21,6 +21,6 @@ package-lock.json
 assets/js/dist
 .DS_Store
 TODO.md
-old*
+
 .vscode
 2024-08-08-hello*
