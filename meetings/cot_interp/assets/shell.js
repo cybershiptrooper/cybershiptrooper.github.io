@@ -16,6 +16,13 @@ const COLLECTION = {
 
 const MEETINGS = [
   {
+    slug: "2026-04-30",
+    date: "30 April 2026",
+    short: "30 Apr 2026",
+    title: "Masks that <em>learn</em>",
+    sub: "Subnetwork probing & forced-answer probes"
+  },
+  {
     slug: "2026-04-21",
     date: "21 April 2026",
     short: "21 Apr 2026",

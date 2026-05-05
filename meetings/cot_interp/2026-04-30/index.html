@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Masks that learn — 30 April 2026</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=Source+Serif+4:opsz,wght@8..60,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="../assets/theme.css">
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      processEscapes: true
+    },
+    chtml: { scale: 1.02 },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+<style>
+  /* Foldable derivation block — scoped to this page only. */
+  details.derivation {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    padding: 14px 20px;
+    margin: 18px 0 22px;
+    border-radius: 2px;
+  }
+  details.derivation[open] {
+    background: var(--bg-deep);
+  }
+  details.derivation > summary {
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    font-weight: 500;
+    padding: 2px 0;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  details.derivation > summary::-webkit-details-marker { display: none; }
+  details.derivation > summary::before {
+    content: "+";
+    display: inline-block;
+    width: 14px; height: 14px;
+    line-height: 12px;
+    text-align: center;
+    border: 1px solid var(--accent);
+    color: var(--accent-deep);
+    font-family: var(--mono);
+    font-size: 12px;
+    flex: 0 0 auto;
+  }
+  details.derivation[open] > summary::before { content: "−"; }
+  details.derivation > summary:hover { color: var(--ink); }
+  details.derivation > .deriv-body {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--rule);
+    font-family: var(--serif-body);
+  }
+  details.derivation > .deriv-body p { margin: 10px 0; }
+  details.derivation > .deriv-body p:first-child { margin-top: 0; }
+  details.derivation > .deriv-body p:last-child { margin-bottom: 0; }
+
+  /* Inline links — match the editorial palette. */
+  .panel a, .aside a, .deck a, details.derivation a {
+    color: var(--accent-deep);
+    border-bottom: 1px dotted var(--accent);
+    text-decoration: none;
+    transition: color 120ms ease, border-color 120ms ease;
+  }
+  .panel a:hover, .aside a:hover, .deck a:hover, details.derivation a:hover {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
+  }
+  /* Section anchors used by hyperparameter cross-refs. */
+  .hp-table th, .hp-table td { vertical-align: top; }
+
+  /* Tab 2 — three-up resample comparison strip. */
+  .resample-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    margin: 26px 0 8px;
+  }
+  .resample-grid figure { margin: 0; }
+  .resample-grid figure.full { grid-column: 1 / -1; }
+  @media (max-width: 760px) {
+    .resample-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Tab 3 — forced-answer pictorial diagram. */
+  .probe-diagram {
+    margin: 22px auto 8px;
+    padding: 22px 24px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    max-width: var(--measure);
+    position: relative;
+  }
+  .probe-diagram::before {
+    content: "schematic";
+    position: absolute;
+    top: -9px; left: 18px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+  }
+  .probe-diagram .seq {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin: 6px 0;
+  }
+  .probe-diagram .chunk {
+    padding: 4px 10px;
+    border: 1px solid var(--rule);
+    background: var(--bg);
+    border-radius: 2px;
+    color: var(--muted);
+  }
+  .probe-diagram .chunk.prefix { color: var(--ink); border-color: var(--ink-soft); }
+  .probe-diagram .chunk.gap { color: var(--accent-deep); border-color: var(--accent); border-style: dashed; }
+  .probe-diagram .chunk.suffix { color: var(--accent-deep); border-color: var(--accent); background: var(--accent-soft); }
+  .probe-diagram .chunk.read {
+    color: var(--ink); border-color: var(--ink); background: var(--bg-deep);
+    font-weight: 500;
+  }
+  .probe-diagram .arr { color: var(--muted-light); }
+  .probe-diagram .lbl {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 14px 0 4px;
+  }
+  .probe-diagram .lbl:first-child { margin-top: 0; }
+  .probe-diagram .reads {
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--rule);
+    font-family: var(--serif-body);
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+
+  /* Tab 3 — small probe figure pair. */
+  .probe-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    margin: 22px 0 4px;
+  }
+  .probe-pair figure { margin: 0; }
+  @media (max-width: 760px) {
+    .probe-pair { grid-template-columns: 1fr; }
+  }
+</style>
+
+</head>
+
+<body data-slug="2026-04-30">
+
+<button class="nav-toggle" type="button" aria-label="Open meetings menu">≡</button>
+<div class="nav-scrim" aria-hidden="true"></div>
+
+<div class="app">
+
+  <aside class="sidebar" aria-label="Meeting navigation"></aside>
+
+  <main class="content">
+    <div class="shell">
+
+      <header class="masthead">
+        <div class="kicker">Research log · RL interpretability</div>
+        <h1>Masks that <em>learn</em>, signal that <em>vanishes</em>.</h1>
+        <p class="deck">
+          Hard-Concrete subnetwork probing on sentence-level attention edges,
+          why last week's 10%-sparsity bump dissolved under more samples, and
+          three forced-answer probes for when chain resampling runs out of
+          signal.
+        </p>
+        <div class="byline">
+          <span>30 April 2026</span>
+          <span class="dot"></span>
+          <span>Meeting notes</span>
+          <span class="dot"></span>
+          <span>Reading time ~ 12 min</span>
+        </div>
+      </header>
+
+      <div class="tabs-wrap">
+        <div class="tabs" role="tablist">
+          <button class="tab-btn" role="tab" id="tab1-btn" aria-controls="tab1" aria-selected="true"
+                  data-target="tab1"><span class="num">01</span>Subnetwork probing</button>
+          <button class="tab-btn" role="tab" id="tab2-btn" aria-controls="tab2" aria-selected="false"
+                  data-target="tab2"><span class="num">02</span>Last week was noise</button>
+          <button class="tab-btn" role="tab" id="tab3-btn" aria-controls="tab3" aria-selected="false"
+                  data-target="tab3"><span class="num">03</span>Forced-answer probes</button>
+        </div>
+      </div>
+
+      <!-- ============================ TAB 1 =========================== -->
+      <section class="panel" id="tab1" role="tabpanel" aria-labelledby="tab1-btn" data-active="true">
+
+        <h2>Hard-Concrete subnetwork probing on attention edges, with the derivations folded out of the way.</h2>
+
+        <p>The masking branch is now end-to-end: a learnable scalar per
+        $(\text{layer},\text{head},\text{src},\text{tgt})$ edge,
+        trained with a Hard-Concrete relaxation, $L_0$ penalty on the
+        expected mask occupancy, and the same global <code>reward_gap</code>
+        objective the IS sweep uses. It rides on top of the existing SDPA
+        log-additive bias, so a sampled mask of exactly $0$ becomes a
+        $\log\!\approx\!-18$ pre-softmax bias and SDPA never has to
+        materialise the attention-weight matrix.</p>
+
+        <p>Most of the week was logistics, not algorithm. Cluster nodes were
+        unavailable, so the runs moved to runpod with a leased
+        cluster — the trade was that for now we have just the one prompt,
+        not the multi-prompt sweep. Saving FP32 logits of shape
+        $(B, T, V)$ for SNIS reweighting blew memory at $T \approx 32\text{k}$;
+        a Liger fused log-prob kernel that <em>should</em> have produced
+        $(B, T)$ log-probs without materialising logits returned
+        <code>NaN</code> losses in our setup. The fallback is a
+        <code>torch.compile</code>-fused chunked log-prob path
+        (<code>chain_log_prob_chunked</code>), still tight on memory but
+        survivable.</p>
+
+        <h3>§ 1 · One-line loss</h3>
+
+        <p>The learnable parameter is one <strong>real scalar</strong>
+        $\log\alpha_e \in \mathbb{R}$ per edge — not a probability, not a
+        bounded value. The mask itself $m_e \in [0,1]$ is derived from
+        $\log\alpha_e$ each forward pass.</p>
+
+        <div class="method-card">
+          <div class="method-tag">Loss · per step</div>
+          <div class="method-title"><code>nodewise_subnetwork_probing_sdpa</code></div>
+
+          <p class="method-eq">
+            $$ \boxed{\;
+              \mathcal{L}(\log\alpha)
+              \;=\;
+              \mathcal{L}_{\text{task}}\!\bigl(m(\log\alpha)\bigr)
+              \;+\;
+              \lambda(t)\,\overline{\Pr[m > 0]}
+            \;} $$
+          </p>
+
+        </div>
+
+        <ul>
+          <li><strong>Task term.</strong> $\mathcal{L}_{\text{task}}$ is
+          any of the existing objectives — local KL, global
+          <code>answer_kl</code>, or global <code>reward_gap</code> with
+          tempered SNIS.</li>
+          <li><strong>Sparsity term.</strong> The
+          <a href="#deriv-l0">expected $L_0$ as a shifted sigmoid</a>,
+          averaged over edges (mean, not sum).</li>
+          <li><strong>Schedule.</strong> $\lambda(t)$ is not constant —
+          it follows a <a href="#deriv-schedule">warmup-then-ramp
+          schedule</a>.</li>
+          <li><strong>Optimisation.</strong> Adam on $\log\alpha$, frozen
+          model weights, one Hard-Concrete sample per step shared across
+          all branches.</li>
+        </ul>
+
+        <h3>§ 2 · The Hard-Concrete mask</h3>
+
+        <p>Each forward pass draws one logistic-noise sample $u_e$, pushes
+        $\log\alpha_e + \mathrm{logit}(u_e)$ through a temperature-$\beta$
+        sigmoid, then stretches the $(0,1)$ output past $[0,1]$ and
+        clamps. The stretch-and-clamp is what gives the mask non-zero
+        probability of being <em>exactly</em> $0$ or <em>exactly</em>
+        $1$:</p>
+
+        <div class="method-card">
+          <div class="method-tag">Sample · forward</div>
+          <div class="method-title">Three lines, one mask sample</div>
+
+          <p class="method-eq">
+            $$
+            s_e \;=\; \sigma\!\left(\frac{\mathrm{logit}(u_e) + \log\alpha_e}{\beta}\right),\quad
+            u_e \sim \mathcal{U}(\epsilon,\,1{-}\epsilon)
+            $$
+          </p>
+          <p class="method-eq">
+            $$
+            \bar s_e \;=\; s_e\,(\zeta - \gamma) + \gamma,\qquad
+            m_e \;=\; \mathrm{clip}_{[0,1]}(\bar s_e)
+            $$
+          </p>
+          <p class="method-eq-expand">
+            $$
+            \widehat m_e \;=\; \mathrm{clip}_{[0,1]}\!\Bigl(
+              \sigma\!\bigl(\log\alpha_e/\beta\bigr)\,(\zeta-\gamma) + \gamma
+            \Bigr) \quad\text{(noise-free read-out)}
+            $$
+          </p>
+
+          <p class="method-note">
+            Constants are fixed at $\beta = 2/3$, $\gamma = -0.1$,
+            $\zeta = 1.1$
+            — see <a href="#deriv-constants">what each one
+            does</a>. The mask installs as a pre-softmax bias
+            $\log m_e$ on the SDPA backend (clamped at $10^{-8}$ before
+            $\log$), so a sampled $0$ becomes
+            $\log\!\approx\!-18$ and SDPA never materialises the
+            attention-weight matrix.
+          </p>
+        </div>
+
+        <details class="derivation" id="deriv-constants">
+          <summary>What $\beta$, $\gamma$, $\zeta$ each control</summary>
+          <div class="deriv-body">
+            <ul>
+              <li><strong>$\beta$ — sigmoid temperature.</strong> Divides
+              the inner logit before $\sigma$. $\beta = 1$ is the plain
+              logistic; $\beta < 1$ <em>sharpens</em> the sigmoid so a
+              small change in $\log\alpha_e$ flips $s_e$ between near-$0$
+              and near-$1$ more decisively. At $\beta = 2/3$ a
+              $\log\alpha_e$ shift of about $1$ already moves $s_e$ across
+              most of $(0,1)$, so the post-clamp mass concentrates on the
+              hard ends. $\beta \to 0$ is the discrete limit; $\beta = 1$
+              would leave a smooth, fully soft sigmoid. The paper holds
+              $\beta$ fixed (no annealing); we follow that.</li>
+
+              <li><strong>$\gamma < 0$ — lower stretch.</strong> Shifts
+              the sigmoid output below $0$ before clamping, so any
+              $s_e \le -\gamma/(\zeta-\gamma) \approx 0.083$ collapses to
+              an exact $m_e = 0$. Without $\gamma < 0$ the mask would
+              never be exactly off, only asymptotically small —
+              gradients would keep nudging "near-zero" edges, and the
+              mask would never reach a hard 0/1.</li>
+
+              <li><strong>$\zeta > 1$ — upper stretch.</strong> Symmetric
+              to $\gamma$: $\zeta = 1.1$ means any $s_e$ above
+              $(1-\gamma)/(\zeta-\gamma) \approx 0.917$ saturates to an
+              exact $m_e = 1$. Edges that "want to stay" get pinned at
+              full attention with zero gradient pressure.</li>
+            </ul>
+
+            <p>Together: $(\gamma, \zeta)$ creates the hard $0$ / hard $1$
+            tails; $\beta$ controls how aggressively the sigmoid pushes
+            $s_e$ into those tails. The fixed combination $(2/3, -0.1, 1.1)$
+            from <a href="https://arxiv.org/abs/1712.01312">Louizos,
+            Welling &amp; Kingma, 2018</a> has been tuned so that under
+            the prior $\log\alpha = 0$ the expected mask is roughly
+            $\widehat m \approx 0.5$ with non-trivial mass at both $0$
+            and $1$.</p>
+          </div>
+        </details>
+
+        <h3>§ 3 · Sparsity penalty as a shifted sigmoid</h3>
+
+        <p>With $(\beta, \gamma, \zeta)$ fixed, the per-edge active
+        probability collapses to a sigmoid of $\log\alpha_e$ shifted by
+        a single constant:</p>
+
+        <div class="method-card">
+          <div class="method-tag">Sparsity · expected $L_0$</div>
+          <div class="method-title">$\Pr[m_e > 0]$ is closed-form in $\log\alpha_e$</div>
+
+          <p class="method-eq">
+            $$ \boxed{\;
+              \Pr[m_e > 0] \;=\; \sigma\!\bigl(\log\alpha_e - C\bigr),
+              \quad
+              C \;=\; \beta\,\log(-\gamma/\zeta)
+            \;} $$
+          </p>
+          <p class="method-eq-expand">
+            $$
+            C \;=\; \tfrac{2}{3}\,\log\!\bigl(0.1 / 1.1\bigr)
+              \;=\; -\tfrac{2}{3}\log 11
+              \;\approx\; -1.60.
+            $$
+          </p>
+        </div>
+
+        <ul>
+          <li>$\log\alpha_e \approx -1.60 \Rightarrow$ edge is on with
+          probability $\approx 0.5$ — the "kill threshold".</li>
+          <li>$\log\alpha_e \gg -1.60 \Rightarrow$ near-always on; the
+          sparsity term costs $\approx 1$ per edge, so all-on is
+          expensive.</li>
+          <li>$\log\alpha_e \ll -1.60 \Rightarrow$ near-always off; the
+          sparsity term costs $\approx 0$, and the noise-free read-out
+          $\widehat m_e$ has hit the lower clamp.</li>
+          <li>Closed-form, differentiable in $\log\alpha_e$, no
+          Monte-Carlo of the mask sample needed.</li>
+          <li>Loss uses the <em>mean</em> over edges, not the sum (Cao et
+          al.) — keeps $\lambda$ comparable across granularities.</li>
+        </ul>
+
+        <details class="derivation" id="deriv-l0">
+          <summary>Why the closed form is a shifted sigmoid</summary>
+          <div class="deriv-body">
+            <p>The mask $m_e$ is exactly $0$ iff the stretched sigmoid
+            $\bar s_e \le 0$, i.e. iff $s_e \le -\gamma/(\zeta-\gamma)$.
+            Using $\sigma^{-1}(t) = \log\bigl(t/(1-t)\bigr)$ at
+            $t = -\gamma/(\zeta-\gamma)$ gives $\sigma^{-1}(t) =
+            \log(-\gamma/\zeta)$. Because $u_e$ is uniform,
+            $\mathrm{logit}(u_e)$ is logistic-distributed, so</p>
+
+            $$
+            \Pr[s_e > t]
+            \;=\; \Pr\!\bigl[\mathrm{logit}(u_e) > \beta\,\sigma^{-1}(t) - \log\alpha_e\bigr]
+            \;=\; \sigma\!\bigl(\log\alpha_e - \beta\,\sigma^{-1}(t)\bigr).
+            $$
+
+            <p>Substituting the threshold gives
+            $\Pr[m_e > 0] = \sigma(\log\alpha_e - C)$ with
+            $C = \beta\log(-\gamma/\zeta)$. With our constants
+            $C \approx -1.60$ — exactly the "kill threshold" referenced
+            above.</p>
+
+            <p>How the per-entry probabilities are reduced to one scalar
+            for the loss:</p>
+
+            <ul>
+              <li><code>pair</code> granularity: one $(1, S, S)$ tensor is
+              shared across all target layers; mean is taken over that
+              one tensor.</li>
+              <li><code>layer</code> / <code>head</code> granularity: each
+              target layer has its own $(1, S, S)$ or $(H, S, S)$ tensor;
+              per-layer means are averaged across layers.</li>
+            </ul>
+          </div>
+        </details>
+
+        <h3>§ 4 · The $\lambda$ schedule, and why it isn't a constant</h3>
+
+        <p>Hold $\lambda$ constant from step zero and the mask collapses
+        before it has explored anything useful. Following Cao et al. we
+        warm up at $\lambda = 0$, ramp linearly to $\lambda_\text{max}$, and
+        hold.</p>
+
+        <details class="derivation" id="deriv-schedule">
+          <summary>Warmup → ramp → hold, with defaults</summary>
+          <div class="deriv-body">
+            <p>With $f = t / (T-1)$ over training steps:</p>
+
+            $$
+            \lambda(t) \;=\;
+            \begin{cases}
+              0 & f < f_\text{warmup} \\[3pt]
+              \lambda_\text{max} \cdot \dfrac{f - f_\text{warmup}}{f_\text{ramp}}
+                & f_\text{warmup} \le f < f_\text{warmup} + f_\text{ramp} \\[8pt]
+              \lambda_\text{max} & \text{otherwise.}
+            \end{cases}
+            $$
+
+            <p>Defaults: $f_\text{warmup} = 0.25$, $f_\text{ramp} = 0.50$ —
+            so the first quarter of training is pure task loss, the next
+            half ramps the regulariser, and the final quarter holds it. The
+            forward $L_0$ pass is skipped entirely during warmup. Setting
+            <code>l0_lambda_schedule=False</code> reverts to a flat
+            $\lambda \equiv \lambda_\text{max}$.</p>
+          </div>
+        </details>
+
+        <h3>§ 5 · Hyperparameters</h3>
+
+        <p>Subnetwork-probing-specific knobs only — every shared CLI
+        hyperparameter (granularity, mode, sentence gap, IS temperature,
+        layers to analyse, …) is forwarded to the base class unchanged.
+        IG-only kwargs are accepted and ignored, so this method is a
+        drop-in replacement in the factory.</p>
+
+        <div class="table-wrap hp-table">
+          <table>
+            <thead>
+              <tr>
+                <th>knob</th>
+                <th>default</th>
+                <th>what it controls</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>num_training_steps</code></td>
+                <td>150</td>
+                <td>Adam steps; one HC sample per step shared across branches.</td>
+              </tr>
+              <tr>
+                <td><code>learning_rate</code></td>
+                <td>0.05</td>
+                <td>Adam LR on $\log\alpha$ — Louizos-range.</td>
+              </tr>
+              <tr>
+                <td><code>l0_lambda</code></td>
+                <td>$10^{-3}$</td>
+                <td>$\lambda_\text{max}$ in the
+                  <a href="#deriv-l0">closed-form $L_0$ penalty</a>.</td>
+              </tr>
+              <tr>
+                <td><code>l0_lambda_schedule</code></td>
+                <td>True</td>
+                <td>Toggles the
+                  <a href="#deriv-schedule">warmup-and-ramp schedule</a>.</td>
+              </tr>
+              <tr>
+                <td><code>l0_warmup_frac</code></td>
+                <td>0.25</td>
+                <td>Initial fraction at $\lambda = 0$
+                  (<a href="#deriv-schedule">schedule</a>).</td>
+              </tr>
+              <tr>
+                <td><code>l0_ramp_frac</code></td>
+                <td>0.50</td>
+                <td>Linear ramp window
+                  (<a href="#deriv-schedule">schedule</a>).</td>
+              </tr>
+              <tr>
+                <td><code>log_alpha_init</code></td>
+                <td>2.0</td>
+                <td><strong>Deviation from paper.</strong> Gives
+                  $\widehat m_e \approx 0.99$ at step 0 — masks start
+                  nearly fully on; <code>reward_gap</code> learns
+                  <em>what to remove</em> rather than what to add.</td>
+              </tr>
+              <tr>
+                <td><code>hard_concrete_beta</code></td>
+                <td>$2/3$</td>
+                <td>Temperature in the
+                  <a href="#deriv-constants">HC sample</a>; held fixed (no
+                  annealing).</td>
+              </tr>
+              <tr>
+                <td><code>hard_concrete_gamma</code></td>
+                <td>$-0.1$</td>
+                <td>Lower stretch in the
+                  <a href="#deriv-constants">HC sample</a>.</td>
+              </tr>
+              <tr>
+                <td><code>hard_concrete_zeta</code></td>
+                <td>$1.1$</td>
+                <td>Upper stretch in the
+                  <a href="#deriv-constants">HC sample</a>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="aside">
+          The score actually saved is the noise-free mean
+          $\widehat m_e \in [0,1]$; the threshold sweep in
+          <code>evaluate_mask</code> turns that continuous score into a
+          binary mask at any sparsity. So the L0 penalty is a soft
+          regulariser, not a calibrated sparsity constraint — calibration
+          happens at evaluation.
+        </div>
+
+        <h3>§ 6 · Evaluation — what the paper does, and how we deviate</h3>
+
+        <p>Training saves a <code>NodeMask</code> whose
+        <code>.scores</code> attribute is the deterministic read-out
+        $\widehat m_e \in [0,1]$ at the configured granularity. There are
+        two views of how to use it.</p>
+
+        <h4>Cao et al.'s recipe — install $\widehat m$ directly</h4>
+
+        <p>The paper does <em>not</em> threshold the saved scores. It
+        installs $\widehat m_e$ as the mask, with no further conversion:</p>
+
+        <ul>
+          <li>Edges with $\log\alpha_e \le \beta\log(-\gamma/\zeta)
+          \approx -1.60$ have $\widehat m_e$ clamp to <em>exact</em> $0$
+          and are genuinely ablated — the "kill threshold" from §3.</li>
+          <li>Surviving edges keep their continuous $\widehat m_e \in
+          (0,1]$ and act as a soft attenuation through the SDPA
+          log-bias.</li>
+          <li>Reported sparsity is the fraction of exactly-zero entries,
+          not a quantile. It is a <strong>training output</strong>,
+          determined by $\lambda_\text{max}$.</li>
+        </ul>
+
+        <p>To trace a sparsity-vs-accuracy curve, Cao et al. retrain the
+        mask at several $\lambda_\text{max}$ values
+        ($\lambda_\text{max} \in \{1, 5, 10, 25, 125\}$ in their paper)
+        and pick the largest one whose accuracy stays within a tolerance
+        of fine-tuning. One trained mask = one point on the curve.</p>
+
+        <h4>Our deviation — sweep thresholds over a single trained mask</h4>
+
+        <p>We use a static $\lambda_\text{max}$ and instead sweep
+        <em>thresholds</em> over the saved scores at evaluation time, so
+        a single trained mask traces an entire sparsity axis. This is the
+        "compensation" called out as deviation #2 in the implementation
+        note: we don't calibrate $\lambda_\text{max}$ per target sparsity,
+        so the threshold sweep does that calibration after the fact.</p>
+
+        <ol>
+          <li>Pick a target sparsity $s \in [0,1]$ — the fraction of
+          edges to ablate.</li>
+          <li>Compute $\tau_s$ as the $s$-quantile of the flattened
+          scores.</li>
+          <li>Zero edges below the threshold; keep the rest as-is.</li>
+          <li>Install the result via <code>install_mask_hooks</code> and
+          run one forward pass per evaluation prompt.</li>
+        </ol>
+
+        <pre style="font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 12px 14px; border-radius: 2px; overflow-x: auto; margin: 14px 0; line-height: 1.5;">threshold = torch.quantile(scores.flatten(), sparsity)
+masked    = torch.where(scores &gt;= threshold, scores, scores.new_zeros(()))</pre>
+
+        <p>Standard sweep is
+        $s \in \{0.0,\,0.3,\,0.5,\,0.7,\,0.9\}$ — the same axis as the
+        resample curves in tab 2 and last week's IS sweep. Sparsity
+        $0.0$ is the unmasked baseline; sparsity $0.9$ ablates the
+        lowest-scoring 90% of edges.</p>
+
+        <div class="aside">
+          The ranking the threshold sweep walks is exactly Cao et al.'s
+          $\widehat m_e$ — same scores, same edges. What changes is who
+          decides where the cutoff falls: the paper bakes it into
+          training via $\lambda_\text{max}$; we read it off post-hoc via
+          a quantile. Both should agree at the sparsity Cao et al.'s
+          training would have hit, and the threshold sweep gives the
+          rest of the curve for free.
+        </div>
+
+        <p>Two consequences worth flagging:</p>
+
+        <ul>
+          <li><strong>The "natural" sparsity is built into
+          $\widehat m$.</strong> A mask trained at our default
+          $\lambda_\text{max} = 10^{-3}$ already has some entries clamped
+          to exact $0$ — that count is the sparsity Cao et al. would
+          report. The threshold sweep simply picks any other $s$ along
+          the same ranking.</li>
+          <li><strong>Threshold sweeps blur paper-style sparsity.</strong>
+          Sweeping past the natural sparsity zeros out edges that the
+          training procedure thought were worth keeping
+          ($\widehat m_e > 0$). This is fine for cross-method comparison
+          on a fixed sparsity axis but is not the same regime the paper
+          studies — it's the deviation, not a faithful re-implementation.</li>
+        </ul>
+
+        <h3>§ 7 · The greedy-pruning baseline</h3>
+
+        <p>The non-learning baseline we compare against: rank edges by an
+        importance score, ablate them in greedy order, and read off
+        evaluation metrics at each ablation step. No mask training, no
+        regulariser — a deterministic ladder.</p>
+
+        <figure>
+          <div class="figure-frame">
+            <img src="images/greedy_pruning.jpg"
+                 alt="Greedy pruning algorithm — rank edges by score, ablate one at a time, evaluate after each ablation.">
+            <figcaption><span class="fig-num">Fig. 1</span>Greedy pruning. Rank attention edges by an importance score (e.g. an attribution-patching gradient), then iteratively ablate the lowest-ranked edge and re-evaluate. The resulting curve is what every learned mask in this report is judged against.</figcaption>
+          </div>
+        </figure>
+
+      </section>
+
+      <!-- ============================ TAB 2 =========================== -->
+      <section class="panel wide-panel" id="tab2" role="tabpanel" aria-labelledby="tab2-btn">
+
+        <h2>The 10%-sparsity bump from last week was within the noise floor.</h2>
+
+        <p>Last week's headline was a 10%-sparsity gap on the resample
+        evaluation: at that one threshold, our masks looked like they
+        recovered correctness better than random ablation. This week's
+        rerun moves $N$ from 16 to 32 branches and adds a 95% bootstrap
+        confidence band. The gap dissolves: the error bars at 10% sparsity
+        are the size of the fluctuations we previously read as signal.
+        Subnetwork probing in particular does not separate from random.</p>
+
+        <div class="resample-grid">
+          <figure class="full">
+            <div class="figure-frame">
+              <img src="images/resample_eval/old.png"
+                   alt="Old resample-eval plot from last week, N=16, no confidence intervals.">
+              <figcaption><span class="fig-num">Fig. 1</span>Last week, $N = 16$ branches, no CIs. The 10%-sparsity gap was the basis for "the masks beat random".</figcaption>
+            </div>
+          </figure>
+
+          <figure>
+            <div class="figure-frame">
+              <img src="images/resample_eval/new_without_ci.png"
+                   alt="New resample-eval plot, N=32, no confidence intervals.">
+              <figcaption><span class="fig-num">Fig. 2</span>Same eval, $N = 32$, no CIs. The 10%-sparsity gap visibly compresses — the masks track random within a few points across the whole sparsity axis.</figcaption>
+            </div>
+          </figure>
+
+          <figure>
+            <div class="figure-frame">
+              <img src="images/resample_eval/new_with_ci.png"
+                   alt="New resample-eval plot, N=32, with 95% bootstrap confidence intervals.">
+              <figcaption><span class="fig-num">Fig. 3</span>Same eval, $N = 32$, with 95% bootstrap CIs. The error bars at any sparsity are roughly the size of the fluctuations between methods — including subnetwork probing.</figcaption>
+            </div>
+          </figure>
+        </div>
+
+        <div class="aside">
+          $N = 32$ is still small for a bootstrap band — the CIs are
+          themselves noisy — but the takeaway is robust to that: at this
+          $N$ none of the masks cleanly separate from the random baseline.
+          The next move is either many more branches (memory permitting)
+          or a metric where 32 samples per condition is enough — which is
+          what tab 3 sets up.
+        </div>
+
+      </section>
+
+      <!-- ============================ TAB 3 =========================== -->
+      <section class="panel" id="tab3" role="tabpanel" aria-labelledby="tab3-btn">
+
+        <h2>If the signal doesn't reach 10–30k tokens away, ask the model directly instead.</h2>
+
+        <p>The branching evaluation samples 10–30k tokens after the
+        analysis timestep, then asks how often the answer comes out
+        right. Tab 2 is one way to read the result: at 32 samples the
+        signal is buried in noise. The other reading is more structural —
+        the signal may simply not propagate that far. For multiple-choice
+        prompts there is a cheaper read of the same question: force the
+        answer at the analysis position and look at the model's logits
+        directly. Two probes, both deterministic, both one forward pass
+        per (prefix, mask).</p>
+
+        <h3>§ 1 · Forced answer at token T</h3>
+
+        <p>After the prefix (with optional $k$ extra reasoning sentences
+        from the base path), append a fixed closing-of-thought suffix and
+        read the four answer-letter logits from the very next position.
+        Renormalising over $\{A,B,C,D\}$ gives the model's
+        forced-answer distribution; comparing that to the unmasked
+        distribution gives a per-mask probe-KL.</p>
+
+        <div class="method-card">
+          <div class="method-tag">Probe · forced answer</div>
+          <div class="method-title">Suffix template</div>
+
+          <p class="method-eq">
+<pre style="font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 12px 14px; border-radius: 2px; overflow-x: auto; margin: 6px 0;">suffix = " &lt;/think&gt; I think the answer is "</pre>
+          </p>
+
+          <p class="method-eq-expand">
+            $$ \widehat P_M(a) \;=\; \mathrm{softmax}\!\bigl(z_M[t_a]\bigr)_{a \in \{A,B,C,D\}} $$
+          </p>
+
+          <p class="method-note">
+            $z_M$ are the masked model's logits at the suffix's last
+            position; $t_a$ is the token id of letter $a$. No chain
+            sampling, no $\boxed{\dots}$ parsing, no SNIS — therefore no
+            SNIS-collapse pathologies.
+          </p>
+        </div>
+
+        <p>The flag <code>--sentences_after_prefix k</code> inserts $k$
+        reasoning sentences from the base path between the prefix and the
+        suffix, so the probe can range from "force the answer right now"
+        ($k = 0$) to "force the answer after a few more reasoning
+        sentences" ($k > 0$). Those extra sentences participate in mask
+        learning, which is the lever that lets the optimiser meaningfully
+        shift the answer distribution.</p>
+
+        <div class="probe-diagram" aria-hidden="true">
+          <span class="lbl">k = 0 — force immediately</span>
+          <div class="seq">
+            <span class="chunk prefix">prefix &nbsp;s<sub>1</sub>…s<sub>N</sub></span>
+            <span class="arr">→</span>
+            <span class="chunk suffix">&lt;/think&gt; I think the answer is</span>
+            <span class="arr">→</span>
+            <span class="chunk read">[A | B | C | D]</span>
+          </div>
+
+          <span class="lbl">k &gt; 0 — let a few sentences play</span>
+          <div class="seq">
+            <span class="chunk prefix">prefix &nbsp;s<sub>1</sub>…s<sub>N</sub></span>
+            <span class="arr">+</span>
+            <span class="chunk gap">s<sub>N+1</sub>…s<sub>N+k</sub></span>
+            <span class="arr">→</span>
+            <span class="chunk suffix">&lt;/think&gt; I think the answer is</span>
+            <span class="arr">→</span>
+            <span class="chunk read">[A | B | C | D]</span>
+          </div>
+
+          <div class="reads">
+            Read: a single logit row. Renormalise over four token columns.
+            The probe is a deterministic function of the masked model — one
+            forward pass per (prefix, mask) — so the gradient of any
+            objective on $\widehat P_M$ flows back through real logits, no
+            importance weights involved.
+          </div>
+        </div>
+
+        <p>Three local objectives are wired up against this probe — KL to
+        the clean distribution, a margin between the target letter and
+        the runner-up, and a logit-margin variant operating directly on
+        $z_M$ rather than on the renormalised softmax. Discovery modes
+        cover both gradient-descent SNP and the existing
+        column-zeroing baselines (<code>thought_anchors</code>,
+        <code>suppress</code>-on-answer) measured at the new probe
+        position.</p>
+
+        <div class="aside">
+          We're deliberately not showing forced-answer results yet — the
+          point of this tab is the methodology and the lever that
+          <code>sentences_after_prefix</code> introduces. The next meeting
+          will fold in the sweep across $(\lambda, \text{lr}, k)$ on
+          GPQA-32 / s50.
+        </div>
+
+        <h3>§ 2 · Probe at T — cosine similarity to a learned answer probe</h3>
+
+        <p>Train a linear probe on the model's residual stream to predict
+        the final answer letter, then read out cosine similarity between
+        the probe direction and the residual at the analysis position.
+        Same shape of question as forced-answer (one deterministic read
+        per prefix), different mechanism — the probe is a learned summary
+        of what the model "knows" rather than a forced decoding of what it
+        would say.</p>
+
+        <p>Qwen 3 8B is a difficult target for this: the answer is not
+        linearly decodable from the residual at most layers and most
+        positions in the analysis window, so the probe's reliability is
+        thin. The plan is to rerun on
+        <code>gpt-oss-120b</code> — its analysis window doesn't have the
+        same 10–30k-token branching tail, so the signal-to-decode gap
+        should be smaller and the probe useful.</p>
+
+        <div class="probe-pair">
+          <figure>
+            <div class="figure-frame">
+              <img src="images/reasoning_theater_probes/decodability_layer18.png"
+                   alt="Linear-probe decodability of the answer letter across positions, layer 18.">
+              <figcaption><span class="fig-num">Fig. 4</span>Decodability of the answer at layer 18 across positions in the chain. The probe is barely above chance through most of the analysis window — exactly the regime where it should be most useful.</figcaption>
+            </div>
+          </figure>
+
+          <figure>
+            <div class="figure-frame">
+              <img src="images/reasoning_theater_probes/figure19_10ep_layer18.png"
+                   alt="10-epoch probe at layer 18 — answer-direction cosine across positions.">
+              <figcaption><span class="fig-num">Fig. 5</span>10 epochs of training, layer 18. The probe latches at the very end of the chain and barely earlier — and pushing to 30 epochs (next figure) just overfits.</figcaption>
+            </div>
+          </figure>
+
+          <figure>
+            <div class="figure-frame">
+              <img src="images/reasoning_theater_probes/figure19_10ep_layer24.png"
+                   alt="10-epoch probe at layer 24 — answer-direction cosine across positions.">
+              <figcaption><span class="fig-num">Fig. 6</span>Same training budget at layer 24. Slightly better near the end of the chain, no real lift in the analysis window.</figcaption>
+            </div>
+          </figure>
+
+          <figure>
+            <div class="figure-frame">
+              <img src="images/reasoning_theater_probes/figure19_30ep_overfit.png"
+                   alt="30-epoch probe — train fits, test does not.">
+              <figcaption><span class="fig-num">Fig. 7</span>30 epochs, layer 24. The probe overfits — training cosine climbs without held-out generalisation, so additional epochs aren't the bottleneck. Capacity / model is.</figcaption>
+            </div>
+          </figure>
+        </div>
+
+        <div class="aside">
+          Forced-answer and probe-at-$T$ are complementary: forced-answer
+          asks "if I had to commit right now, what would I say?", and
+          probe-at-$T$ asks "is the answer linearly there to be read?".
+          When the answer is decodable they should agree; where they
+          disagree is itself informative — that's most of the analysis
+          window for Qwen 3 8B.
+        </div>
+
+      </section>
+
+      <div class="endnote">End of notes · 30 · IV · 2026</div>
+
+    </div>
+  </main>
+</div>
+
+<script src="../assets/shell.js"></script>
+
+</body>
+</html>
